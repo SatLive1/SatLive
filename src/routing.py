@@ -1,9 +1,9 @@
 from typing import Dict, List, Tuple
 import math
 
-from .satellites import LEOSatellite, MEOSatellite
-from .environment import get_leo_by_id, get_meo_by_id
-from .rl_agent import RLAgent
+from satellites import LEOSatellite, MEOSatellite
+from environment import get_leo_by_id, get_meo_by_id
+from rl_agent import RLAgent
 
 
 def _check_cluster_connectivity(src_leo_id: int, dst_leo_id: int, cluster_leos: List[int], leos: Dict[int, LEOSatellite]) -> bool:
