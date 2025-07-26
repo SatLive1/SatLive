@@ -1,63 +1,107 @@
 """MEO-LEO集群路由系统主程序 - 支持动态MEO"""
+import sys
+import os
+# 将项目根目录添加到Python路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 添加data目录到路径，以便导入data_loader
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'))
 import random
 import argparse
-import os
 import json
-from config import Config
-from trainer import TrainingEnvironment
-from inferencer import ModelInferencer
+
+try:
+    from config import Config
+    from trainer import TrainingEnvironment
+    from inferencer import ModelInferencer
+except ImportError as e:
+    print(f"导入错误: {e}")
+    print("请确保在正确的目录下运行脚本")
+    sys.exit(1)
+
 
 def validate_dynamic_meo_setup(config: Config) -> bool:
-    """验证动态MEO设置的完整性"""
+    """验证动态MEO设置的完整性 - 修改为使用独立文件"""
     print("=== 验证动态MEO设置 ===")
 
-    # 检查数据文件
-    data_file = config.get('data.data_file', 'data/data.json')
-    if not os.path.exists(data_file):
-        print(f"❌ 数据文件不存在: {data_file}")
+    # 获取项目根目录
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(root_dir, 'data')
+
+    # 检查必要的独立数据文件
+    required_files = {
+        'sat_positions_per_slot.json': '卫星位置数据',
+        'meo_positions_per_slot.json': 'MEO位置数据',
+        'MEO_per_slot.json': 'LEO-MEO分配数据',
+        'data.json': '主配置文件'
+    }
+
+    missing_files = []
+    existing_files = {}
+
+    for filename, description in required_files.items():
+        filepath = os.path.join(data_dir, filename)
+        if os.path.exists(filepath):
+            print(f"✅ {description}: {filename}")
+            existing_files[filename] = filepath
+        else:
+            print(f"❌ {description}缺失: {filename}")
+            missing_files.append(filename)
+
+    if missing_files:
+        print(f"❌ 缺少必要文件: {missing_files}")
         return False
 
     try:
-        with open(data_file, 'r') as f:
-            data = json.load(f)
+        # 检查独立文件的数据完整性
 
-        # 检查是否有动态MEO位置数据
-        has_dynamic_meo = 'meo_positions_per_slot' in data
-        has_static_meo = 'meo_positions' in data
+        # 1. 检查卫星位置数据
+        with open(existing_files['sat_positions_per_slot.json'], 'r') as f:
+            sat_positions_data = json.load(f)
+        leo_slots = len(sat_positions_data)
+        print(f"   LEO时间槽数: {leo_slots}")
 
-        if has_dynamic_meo:
-            print("✅ 检测到动态MEO位置数据")
-            meo_slots = len(data['meo_positions_per_slot'])
-            leo_slots = len(data.get('sat_positions_per_slot', []))
-            print(f"   MEO时间槽数: {meo_slots}")
-            print(f"   LEO时间槽数: {leo_slots}")
+        # 2. 检查MEO位置数据
+        with open(existing_files['meo_positions_per_slot.json'], 'r') as f:
+            meo_positions_data = json.load(f)
+        meo_slots = len(meo_positions_data)
+        print(f"   MEO时间槽数: {meo_slots}")
 
-            if meo_slots != leo_slots:
-                print(f"⚠️  警告: MEO和LEO时间槽数不匹配")
-                return False
+        # 3. 检查LEO-MEO分配数据
+        with open(existing_files['MEO_per_slot.json'], 'r') as f:
+            meo_assignments_data = json.load(f)
+        assignment_slots = len(meo_assignments_data)
+        print(f"   LEO-MEO分配时间槽数: {assignment_slots}")
 
-        elif has_static_meo:
-            print("ℹ️  检测到静态MEO位置数据，将进行兼容性处理")
+        # 4. 检查主配置文件
+        with open(existing_files['data.json'], 'r') as f:
+            config_data = json.load(f)
 
-        else:
-            print("❌ 未找到MEO位置数据")
+        num_leos = config_data.get('num_satellites', 7)
+        num_meos = config_data.get('num_meo_satellites', 3)
+        print(f"   配置LEO数量: {num_leos}")
+        print(f"   配置MEO数量: {num_meos}")
+
+        # 验证数据一致性
+        if leo_slots != meo_slots or leo_slots != assignment_slots:
+            print(f"⚠️  警告: 各数据文件的时间槽数不匹配")
+            print(f"   LEO槽数: {leo_slots}, MEO槽数: {meo_slots}, 分配槽数: {assignment_slots}")
             return False
 
-        # 检查LEO-MEO分配数据
-        if 'MEO_per_slot' in data:
-            print("✅ 检测到动态LEO-MEO分配数据")
-        else:
-            print("⚠️  警告: 未找到动态LEO-MEO分配数据")
+        # 验证MEO数量一致性
+        if meo_positions_data:
+            actual_meo_count = len(meo_positions_data[0])
+            if actual_meo_count != num_meos:
+                print(f"⚠️  警告: MEO位置数据中的MEO数量({actual_meo_count})与配置不符({num_meos})")
+                return False
 
-        # 检查查询数据
-        train_queries = data.get('train_queries', [])
-        predict_queries = data.get('predict_queries', [])
-        print(f"   训练查询数: {len(train_queries)}")
-        print(f"   预测查询数: {len(predict_queries)}")
+        # 验证LEO数量一致性
+        if sat_positions_data:
+            actual_leo_count = len(sat_positions_data[0])
+            if actual_leo_count != num_leos:
+                print(f"⚠️  警告: LEO位置数据中的LEO数量({actual_leo_count})与配置不符({num_leos})")
+                return False
 
-        if not train_queries and not predict_queries:
-            print("⚠️  警告: 未找到查询数据")
-
+        print("✅ 检测到动态MEO数据，启用动态MEO训练模式")
         return True
 
     except Exception as e:
@@ -104,56 +148,128 @@ def print_dynamic_meo_info(config: Config):
 
 
 def generate_sample_dynamic_meo_data(config: Config):
-    """生成示例动态MEO数据"""
+    """生成示例动态MEO数据 - 修改为创建独立文件"""
     print("\n=== 生成示例动态MEO数据 ===")
 
-    data_file = config.get('data.data_file', 'data/data.json')
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(root_dir, 'data')
+
+    # 检查是否需要生成示例数据
+    meo_pos_file = os.path.join(data_dir, 'meo_positions_per_slot.json')
+    meo_assign_file = os.path.join(data_dir, 'MEO_per_slot.json')
+    sat_pos_file = os.path.join(data_dir, 'sat_positions_per_slot.json')
+    config_file = os.path.join(data_dir, 'data.json')
+
+    if os.path.exists(meo_pos_file) and os.path.exists(meo_assign_file):
+        print("✅ 已存在动态MEO数据，跳过生成")
+        return True
+
+    if not os.path.exists(config_file):
+        print("❌ 主配置文件不存在，无法生成示例数据")
+        return False
 
     try:
-        # 检查是否需要生成示例数据
-        if os.path.exists(data_file):
-            with open(data_file, 'r') as f:
-                data = json.load(f)
+        # 读取主配置文件获取参数
+        with open(config_file, 'r') as f:
+            data = json.load(f)
 
-            if 'meo_positions_per_slot' in data:
-                print("✅ 已存在动态MEO数据，跳过生成")
-                return True
-        else:
-            print("❌ 数据文件不存在，无法生成示例数据")
-            return False
-
-        # 生成动态MEO数据
-        from data.data_loader import generate_sample_dynamic_meo_data
-
-        num_slots = len(data.get('sat_positions_per_slot', []))
+        num_train_slots = data.get('num_train_slots', 10)
         num_meos = data.get('num_meo_satellites', 3)
+        num_leos = data.get('num_satellites', 7)
 
-        if num_slots == 0:
-            print("❌ 没有LEO位置数据，无法生成MEO数据")
-            return False
+        print(f"为 {num_train_slots} 个时间槽生成数据...")
+        print(f"MEO数量: {num_meos}, LEO数量: {num_leos}")
 
-        print(f"为 {num_slots} 个时间槽生成 {num_meos} 个MEO的动态位置数据...")
+        # 1. 生成MEO位置数据（如果不存在）
+        if not os.path.exists(meo_pos_file):
+            print("生成MEO位置数据...")
+            meo_positions_per_slot = generate_meo_positions_data(num_train_slots, num_meos)
 
-        meo_positions_per_slot = generate_sample_dynamic_meo_data(num_slots, num_meos)
-        data['meo_positions_per_slot'] = meo_positions_per_slot
+            with open(meo_pos_file, 'w') as f:
+                json.dump(meo_positions_per_slot, f, indent=2)
+            print(f"✅ 创建文件: {meo_pos_file}")
 
-        # 备份原文件
-        backup_file = data_file + '.backup'
-        if os.path.exists(data_file):
-            import shutil
-            shutil.copy2(data_file, backup_file)
-            print(f"原文件已备份到: {backup_file}")
+        # 2. 生成LEO-MEO分配数据（如果不存在）
+        if not os.path.exists(meo_assign_file):
+            print("生成LEO-MEO分配数据...")
+            meo_assignments = generate_meo_assignments_data(num_train_slots, num_leos, num_meos)
 
-        # 保存新数据
-        with open(data_file, 'w') as f:
-            json.dump(data, f, indent=2)
+            with open(meo_assign_file, 'w') as f:
+                json.dump(meo_assignments, f, indent=2)
+            print(f"✅ 创建文件: {meo_assign_file}")
 
-        print(f"✅ 动态MEO数据已生成并保存到: {data_file}")
+        # 3. 检查LEO位置数据是否存在（如果不存在从data.json复制）
+        if not os.path.exists(sat_pos_file):
+            if 'sat_positions_per_slot' in data:
+                print("从data.json复制LEO位置数据...")
+                with open(sat_pos_file, 'w') as f:
+                    json.dump(data['sat_positions_per_slot'], f, indent=2)
+                print(f"✅ 创建文件: {sat_pos_file}")
+            else:
+                print("⚠️  警告: 未找到LEO位置数据")
+
+        print("✅ 动态MEO数据已生成")
         return True
 
     except Exception as e:
         print(f"❌ 生成示例数据失败: {e}")
         return False
+
+
+def generate_meo_positions_data(num_slots: int, num_meos: int):
+    """生成MEO位置数据"""
+    import random
+
+    # MEO基础轨道位置
+    base_positions = []
+    for i in range(num_meos):
+        base_lat = 45.0 + i * 10.0  # 分散在不同纬度
+        base_lon = 45.0 + i * 10.0  # 分散在不同经度
+        base_alt = 1000.0  # MEO高度
+        base_positions.append([base_lat, base_lon, base_alt])
+
+    meo_positions_per_slot = []
+
+    for slot in range(num_slots):
+        slot_positions = []
+        for meo_id in range(num_meos):
+            base_lat, base_lon, base_alt = base_positions[meo_id]
+
+            # 模拟轨道运动
+            orbit_offset = slot * 2.0
+            movement_range = 3.0
+
+            new_lat = base_lat + orbit_offset + random.uniform(-movement_range, movement_range)
+            new_lon = base_lon + orbit_offset + random.uniform(-movement_range, movement_range)
+            new_alt = base_alt + random.uniform(-50.0, 50.0)
+
+            # 确保坐标在合理范围内
+            new_lat = max(-90, min(90, new_lat))
+            new_lon = new_lon % 360
+            new_alt = max(800, min(1200, new_alt))
+
+            slot_positions.append([new_lat, new_lon, new_alt])
+
+        meo_positions_per_slot.append(slot_positions)
+
+    return meo_positions_per_slot
+
+
+def generate_meo_assignments_data(num_slots: int, num_leos: int, num_meos: int):
+    """生成LEO-MEO分配数据"""
+    meo_per_slot = []
+
+    for slot in range(num_slots):
+        # 简单的轮询分配
+        leo_meo_assignments = [i % num_meos for i in range(num_leos)]
+
+        slot_data = {
+            "slot_id": slot,
+            "leo_meo_assignments": leo_meo_assignments
+        }
+        meo_per_slot.append(slot_data)
+
+    return meo_per_slot
 
 
 def run_benchmark_comparison(config: Config, args):
@@ -348,7 +464,7 @@ def main():
             'predict_metrics': pred_metrics,
             'generalization_gap': abs(train_metrics['success_rate'] - pred_metrics['success_rate']),
             'dynamic_meo_enabled': True,
-            'evaluation_timestamp': json.dumps(str(datetime.now()))
+            'evaluation_timestamp': str(datetime.now())
         }
 
         eval_file = os.path.join(output_dir, 'evaluation_results_dynamic_meo.json')
@@ -363,34 +479,33 @@ def main():
 
     elif args.mode == 'data':
         print("\n=== 数据加载演示 (动态MEO) ===")
-        from data.data_loader import load_complete_environment, print_environment_summary, validate_dynamic_meo_data
-
-        data_file = config.get('data.data_file', 'data/data.json')
+        # 导入data_loader模块
+        try:
+            from data_loader import load_complete_environment, print_environment_summary, validate_dynamic_meo_data
+        except ImportError:
+            # 如果导入失败，尝试绝对路径导入
+            import sys
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            data_dir = os.path.join(root_dir, 'data')
+            sys.path.insert(0, data_dir)
+            from ..data.data_loader import load_complete_environment, print_environment_summary, validate_dynamic_meo_data
 
         # 验证动态MEO数据
-        try:
-            with open(data_file, 'r') as f:
-                data = json.load(f)
-
-            is_dynamic = validate_dynamic_meo_data(data)
-            print(f"动态MEO数据: {'✅ 有效' if is_dynamic else '❌ 无效或不存在'}")
-
-        except Exception as e:
-            print(f"❌ 数据验证失败: {e}")
-            return
+        is_dynamic = validate_dynamic_meo_data()
+        print(f"动态MEO数据: {'✅ 有效' if is_dynamic else '❌ 无效或不存在'}")
 
         # 演示几个时间槽的数据加载
-        demo_slots = [0, 25, 49]
+        demo_slots = [0, 2, 4]
         print(f"\n演示时间槽: {demo_slots}")
 
         for slot_id in demo_slots:
             try:
-                leos, meos, data = load_complete_environment(slot_id, data_file)
+                leos, meos, data = load_complete_environment(slot_id, neighbors_dir="data/neighbors")
                 print_environment_summary(leos, meos, slot_id)
 
                 # 显示MEO移动信息（如果可用）
                 if slot_id > 0 and is_dynamic:
-                    prev_leos, prev_meos, _ = load_complete_environment(slot_id - 1, data_file)
+                    prev_leos, prev_meos, _ = load_complete_environment(slot_id - 1, neighbors_dir="data/neighbors")
                     print(f"MEO移动信息 (从时间槽 {slot_id-1} 到 {slot_id}):")
                     for meo_id in meos:
                         if meo_id in prev_meos:

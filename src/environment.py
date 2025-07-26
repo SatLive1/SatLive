@@ -1,7 +1,13 @@
 from typing import Dict, Tuple, List
 import math
 
-from satellites import LEOSatellite, MEOSatellite
+try:
+    from satellites import LEOSatellite, MEOSatellite
+except ImportError as e:
+    print(f"导入错误: {e}")
+    print("请确保在正确的目录下运行脚本")
+    import sys
+    sys.exit(1)
 
 
 def distance(pos1: Tuple[float, float, float], pos2: Tuple[float, float, float]) -> float:

@@ -1,9 +1,15 @@
 from typing import Dict, List, Tuple
 import math
 
-from satellites import LEOSatellite, MEOSatellite
-from environment import get_leo_by_id, get_meo_by_id
-from rl_agent import RLAgent
+try:
+    from satellites import LEOSatellite, MEOSatellite
+    from environment import get_leo_by_id, get_meo_by_id
+    from rl_agent import RLAgent
+except ImportError as e:
+    print(f"导入错误: {e}")
+    print("请确保在正确的目录下运行脚本")
+    import sys
+    sys.exit(1)
 
 
 def _check_cluster_connectivity(src_leo_id: int, dst_leo_id: int, cluster_leos: List[int], leos: Dict[int, LEOSatellite]) -> bool:

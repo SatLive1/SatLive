@@ -7,12 +7,18 @@ from typing import Dict, List, Tuple, Optional
 import logging
 from datetime import datetime
 
-from src.config import Config
-from src.satellites import LEOSatellite, MEOSatellite
-from src.rl_agent import RLAgent
-from src.routing import route_request_with_intelligent_edge_selection
-from src.environment import find_nearest_available_leo, analyze_network_topology
-from data.data_loader import load_complete_environment, validate_dynamic_meo_data
+try:
+    from config import Config
+    from satellites import LEOSatellite, MEOSatellite
+    from rl_agent import RLAgent
+    from routing import route_request_with_intelligent_edge_selection
+    from environment import find_nearest_available_leo, analyze_network_topology
+    from data.data_loader import load_complete_environment, validate_dynamic_meo_data
+except ImportError as e:
+    print(f"导入错误: {e}")
+    print("请确保在正确的目录下运行脚本")
+    import sys
+    sys.exit(1)
 
 
 class ModelInferencer:
