@@ -1,15 +1,68 @@
 """
-基于data.json的数据加载和环境初始化模块
+基于分离的JSON文件的数据加载和环境初始化模块
 包含动态MEO卫星信息和LEO-MEO分配关系
+支持从独立的JSON文件加载：sat_positions_per_slot.json, meo_positions_per_slot.json, MEO_per_slot.json
 """
 
 import json
+import os
 from typing import Dict, Tuple, List
 from src.satellites import LEOSatellite, MEOSatellite
 
+def load_sat_positions_per_slot(file_path: str = "data/sat_positions_per_slot.json") -> List[List[List[float]]]:
+    """
+    从独立文件加载LEO卫星位置数据
+
+    Args:
+        file_path: sat_positions_per_slot.json文件路径
+
+    Returns:
+        LEO卫星位置数据 [slot][satellite_id][lat, lon]
+    """
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"警告: 文件 {file_path} 不存在，尝试从data.json加载")
+        return None
+
+def load_meo_positions_per_slot(file_path: str = "data/meo_positions_per_slot.json") -> List[List[List[float]]]:
+    """
+    从独立文件加载MEO卫星位置数据
+
+    Args:
+        file_path: meo_positions_per_slot.json文件路径
+
+    Returns:
+        MEO卫星位置数据 [slot][meo_id][lat, lon, alt]
+    """
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"警告: 文件 {file_path} 不存在，尝试从data.json加载")
+        return None
+
+def load_meo_per_slot(file_path: str = "data/MEO_per_slot.json") -> List[Dict]:
+    """
+    从独立文件加载LEO-MEO分配关系数据
+
+    Args:
+        file_path: MEO_per_slot.json文件路径
+
+    Returns:
+        LEO-MEO分配数据 [{"slot_id": int, "leo_meo_assignments": [int]}]
+    """
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"警告: 文件 {file_path} 不存在，尝试从data.json加载")
+        return None
+
 def load_environment_from_json(json_file: str = "data.json") -> Tuple[Dict[int, LEOSatellite], Dict[int, MEOSatellite], dict]:
     """
-    从JSON文件加载完整的卫星环境数据
+    从JSON文件加载完整的卫星环境数据（兼容旧版本）
 
     Args:
         json_file: JSON数据文件路径
@@ -26,79 +79,122 @@ def load_environment_from_json(json_file: str = "data.json") -> Tuple[Dict[int, 
 
     return leos, meos, data
 
-def get_leo_meo_assignment(slot_id: int, data: dict) -> List[int]:
+def get_leo_meo_assignment(slot_id: int, data: dict = None, meo_per_slot_data: List[Dict] = None) -> List[int]:
     """
     获取指定时间槽的LEO-MEO分配关系
 
     Args:
         slot_id: 时间槽ID
-        data: 原始JSON数据
+        data: 原始JSON数据（用于向后兼容）
+        meo_per_slot_data: 独立的MEO分配数据
 
     Returns:
         LEO卫星对应的MEO控制节点ID列表
     """
-    meo_assignments = data.get('MEO_per_slot', [])
-    for slot_info in meo_assignments:
-        if slot_info['slot_id'] == slot_id:
-            return slot_info['leo_meo_assignments']
+    # 优先使用独立的MEO分配数据
+    if meo_per_slot_data is None:
+        meo_per_slot_data = load_meo_per_slot()
+
+    if meo_per_slot_data is not None:
+        for slot_info in meo_per_slot_data:
+            if slot_info['slot_id'] == slot_id:
+                return slot_info['leo_meo_assignments']
+    elif data is not None:
+        # 向后兼容：从data.json加载
+        meo_assignments = data.get('MEO_per_slot', [])
+        for slot_info in meo_assignments:
+            if slot_info['slot_id'] == slot_id:
+                return slot_info['leo_meo_assignments']
 
     # 如果没找到，返回默认分配
-    num_leos = data.get('num_satellites', 10)
-    num_meos = data.get('num_meo_satellites', 3)
+    if data:
+        num_leos = data.get('num_satellites', 10)
+        num_meos = data.get('num_meo_satellites', 3)
+    else:
+        print("警告: 无法获取卫星数量配置，使用默认值")
+        num_leos = 7
+        num_meos = 3
+
     return [i % num_meos for i in range(num_leos)]
 
-def get_meo_positions_for_slot(slot_id: int, data: dict) -> List[List[float]]:
+def get_meo_positions_for_slot(slot_id: int, data: dict = None, meo_positions_data: List[List[List[float]]] = None) -> List[List[float]]:
     """
     获取指定时间槽的MEO卫星位置信息
 
     Args:
         slot_id: 时间槽ID
-        data: 原始JSON数据
+        data: 原始JSON数据（用于向后兼容）
+        meo_positions_data: 独立的MEO位置数据
 
     Returns:
         MEO卫星位置列表 [[lat, lon, alt], ...]
     """
-    # 检查是否有动态MEO位置数据
-    if 'meo_positions_per_slot' in data:
-        # 新的动态MEO位置格式
-        if slot_id < len(data['meo_positions_per_slot']):
-            return data['meo_positions_per_slot'][slot_id]
+    # 优先使用独立的MEO位置数据
+    if meo_positions_data is None:
+        meo_positions_data = load_meo_positions_per_slot()
 
-    # 回退到静态MEO位置（向后兼容）
-    return data.get('meo_positions', [])
+    if meo_positions_data is not None:
+        if slot_id < len(meo_positions_data):
+            return meo_positions_data[slot_id]
+    elif data is not None:
+        # 向后兼容：从data.json加载
+        if 'meo_positions_per_slot' in data:
+            if slot_id < len(data['meo_positions_per_slot']):
+                return data['meo_positions_per_slot'][slot_id]
+        # 回退到静态MEO位置
+        return data.get('meo_positions', [])
 
-def create_leos_for_slot(slot_id: int, data: dict) -> Dict[int, LEOSatellite]:
+    # 如果都没有，返回空列表
+    print(f"警告: 无法获取时间槽 {slot_id} 的MEO位置数据")
+    return []
+
+def create_leos_for_slot(slot_id: int, data: dict = None, sat_positions_data: List[List[List[float]]] = None,
+                        meo_per_slot_data: List[Dict] = None) -> Dict[int, LEOSatellite]:
     """
     为指定时间槽创建LEO卫星
 
     Args:
         slot_id: 时间槽ID
-        data: 原始JSON数据
+        data: 原始JSON数据（用于向后兼容）
+        sat_positions_data: 独立的LEO位置数据
+        meo_per_slot_data: 独立的MEO分配数据
 
     Returns:
         LEO卫星字典
     """
     leos = {}
 
-    # 获取该时间槽的卫星位置
-    if slot_id >= len(data['sat_positions_per_slot']):
-        raise ValueError(f"时间槽 {slot_id} 超出可用数据范围 (0-{len(data['sat_positions_per_slot'])-1})")
+    # 获取LEO位置数据
+    if sat_positions_data is None:
+        sat_positions_data = load_sat_positions_per_slot()
 
-    sat_positions = data['sat_positions_per_slot'][slot_id]
+    sat_positions = None
+    if sat_positions_data is not None:
+        if slot_id < len(sat_positions_data):
+            sat_positions = sat_positions_data[slot_id]
+    elif data is not None:
+        # 向后兼容：从data.json加载
+        if slot_id >= len(data.get('sat_positions_per_slot', [])):
+            raise ValueError(f"时间槽 {slot_id} 超出可用数据范围 (0-{len(data['sat_positions_per_slot'])-1})")
+        sat_positions = data['sat_positions_per_slot'][slot_id]
+
+    if sat_positions is None:
+        raise ValueError(f"无法获取时间槽 {slot_id} 的LEO位置数据")
 
     # 获取该时间槽的邻居关系
     neighbors_info = None
-    for neighbor_slot in data['neighbors_per_slot']:
-        if neighbor_slot['slot_id'] == slot_id:
-            neighbors_info = neighbor_slot['neighbors']
-            break
+    if data is not None:
+        for neighbor_slot in data.get('neighbors_per_slot', []):
+            if neighbor_slot['slot_id'] == slot_id:
+                neighbors_info = neighbor_slot['neighbors']
+                break
 
     # 获取MEO分配
-    meo_assignments = get_leo_meo_assignment(slot_id, data)
+    meo_assignments = get_leo_meo_assignment(slot_id, data, meo_per_slot_data)
 
     # 创建LEO卫星
     for i, (lat, lon) in enumerate(sat_positions):
-        neighbors = neighbors_info[i] if neighbors_info else []
+        neighbors = neighbors_info[i] if neighbors_info and i < len(neighbors_info) else []
         meo_id = meo_assignments[i] if i < len(meo_assignments) else 0
 
         leos[i] = LEOSatellite(
@@ -113,13 +209,14 @@ def create_leos_for_slot(slot_id: int, data: dict) -> Dict[int, LEOSatellite]:
 
     return leos
 
-def create_meos_for_slot(slot_id: int, data: dict) -> Dict[int, MEOSatellite]:
+def create_meos_for_slot(slot_id: int, data: dict = None, meo_positions_data: List[List[List[float]]] = None) -> Dict[int, MEOSatellite]:
     """
     为指定时间槽创建MEO卫星
 
     Args:
         slot_id: 时间槽ID
-        data: 原始JSON数据
+        data: 原始JSON数据（用于向后兼容）
+        meo_positions_data: 独立的MEO位置数据
 
     Returns:
         MEO卫星字典
@@ -127,7 +224,7 @@ def create_meos_for_slot(slot_id: int, data: dict) -> Dict[int, MEOSatellite]:
     meos = {}
 
     # 获取该时间槽的MEO位置
-    meo_positions = get_meo_positions_for_slot(slot_id, data)
+    meo_positions = get_meo_positions_for_slot(slot_id, data, meo_positions_data)
 
     # 创建MEO卫星
     for i, position in enumerate(meo_positions):
@@ -167,60 +264,83 @@ def update_meo_clusters(leos: Dict[int, LEOSatellite], meos: Dict[int, MEOSatell
 
 def load_complete_environment(slot_id: int, json_file: str = "data.json") -> Tuple[Dict[int, LEOSatellite], Dict[int, MEOSatellite], dict]:
     """
-    加载指定时间槽的完整环境（支持动态MEO）
+    加载指定时间槽的完整环境（支持动态MEO和独立文件）
 
     Args:
         slot_id: 时间槽ID
-        json_file: JSON数据文件路径
+        json_file: JSON数据文件路径（用于向后兼容和其他配置）
 
     Returns:
         (leos, meos, raw_data): 完整的环境数据
     """
-    with open(json_file, 'r') as f:
-        data = json.load(f)
+    # 尝试加载独立的数据文件
+    sat_positions_data = load_sat_positions_per_slot()
+    meo_positions_data = load_meo_positions_per_slot()
+    meo_per_slot_data = load_meo_per_slot()
+
+    # 加载主配置文件（用于其他配置信息）
+    data = None
+    if os.path.exists(json_file):
+        with open(json_file, 'r') as f:
+            data = json.load(f)
 
     # 创建LEO卫星
-    leos = create_leos_for_slot(slot_id, data)
+    leos = create_leos_for_slot(slot_id, data, sat_positions_data, meo_per_slot_data)
 
     # 创建MEO卫星（动态位置）
-    meos = create_meos_for_slot(slot_id, data)
+    meos = create_meos_for_slot(slot_id, data, meo_positions_data)
 
     # 更新MEO的cluster信息
     update_meo_clusters(leos, meos)
 
     return leos, meos, data
 
-def validate_dynamic_meo_data(data: dict) -> bool:
+def validate_dynamic_meo_data(data: dict = None, meo_positions_data: List[List[List[float]]] = None,
+                             sat_positions_data: List[List[List[float]]] = None) -> bool:
     """
     验证动态MEO数据的完整性
 
     Args:
-        data: 原始JSON数据
+        data: 原始JSON数据（可选）
+        meo_positions_data: 独立的MEO位置数据（可选）
+        sat_positions_data: 独立的LEO位置数据（可选）
 
     Returns:
         数据是否有效
     """
-    # 检查是否有动态MEO位置数据
-    if 'meo_positions_per_slot' not in data:
-        print("警告: 没有找到动态MEO位置数据 (meo_positions_per_slot)，将使用静态MEO位置")
-        return False
+    # 尝试加载独立文件
+    if meo_positions_data is None:
+        meo_positions_data = load_meo_positions_per_slot()
+    if sat_positions_data is None:
+        sat_positions_data = load_sat_positions_per_slot()
 
-    meo_positions_per_slot = data['meo_positions_per_slot']
-    sat_positions_per_slot = data.get('sat_positions_per_slot', [])
+    # 检查是否有动态MEO位置数据
+    if meo_positions_data is None:
+        if data is None or 'meo_positions_per_slot' not in data:
+            print("警告: 没有找到动态MEO位置数据")
+            return False
+        meo_positions_data = data['meo_positions_per_slot']
+
+    # 检查LEO位置数据
+    if sat_positions_data is None:
+        if data is None or 'sat_positions_per_slot' not in data:
+            print("警告: 没有找到LEO位置数据")
+            return False
+        sat_positions_data = data['sat_positions_per_slot']
 
     # 检查时间槽数量是否匹配
-    if len(meo_positions_per_slot) != len(sat_positions_per_slot):
-        print(f"警告: MEO位置时间槽数 ({len(meo_positions_per_slot)}) 与LEO位置时间槽数 ({len(sat_positions_per_slot)}) 不匹配")
+    if len(meo_positions_data) != len(sat_positions_data):
+        print(f"警告: MEO位置时间槽数 ({len(meo_positions_data)}) 与LEO位置时间槽数 ({len(sat_positions_data)}) 不匹配")
         return False
 
     # 检查每个时间槽的MEO数量是否一致
-    num_meos = data.get('num_meo_satellites', 3)
-    for slot_id, meo_positions in enumerate(meo_positions_per_slot):
+    num_meos = data.get('num_meo_satellites', 3) if data else 3
+    for slot_id, meo_positions in enumerate(meo_positions_data):
         if len(meo_positions) != num_meos:
             print(f"警告: 时间槽 {slot_id} 的MEO数量 ({len(meo_positions)}) 与配置不符 ({num_meos})")
             return False
 
-    print(f"动态MEO数据验证成功: {len(meo_positions_per_slot)} 个时间槽，每个时间槽 {num_meos} 个MEO")
+    print(f"动态MEO数据验证成功: {len(meo_positions_data)} 个时间槽，每个时间槽 {num_meos} 个MEO")
     return True
 
 def print_environment_summary(leos: Dict[int, LEOSatellite], meos: Dict[int, MEOSatellite], slot_id: int):
@@ -286,39 +406,82 @@ def generate_sample_dynamic_meo_data(num_slots: int, num_meos: int) -> List[List
 
     return meo_positions_per_slot
 
-if __name__ == "__main__":
-    # 测试动态MEO数据加载
+def create_separate_json_files(data_file: str = "data/data.json"):
+    """
+    从原始data.json文件创建独立的JSON文件
 
-    # 首先尝试加载现有数据并验证
+    Args:
+        data_file: 原始数据文件路径
+    """
     try:
-        with open('data/data.json', 'r') as f:
+        with open(data_file, 'r') as f:
             data = json.load(f)
 
-        is_valid = validate_dynamic_meo_data(data)
+        # 确保data目录存在
+        os.makedirs('data', exist_ok=True)
+
+        # 提取并保存sat_positions_per_slot
+        if 'sat_positions_per_slot' in data:
+            with open('data/sat_positions_per_slot.json', 'w') as f:
+                json.dump(data['sat_positions_per_slot'], f, indent=2)
+            print("创建文件: data/sat_positions_per_slot.json")
+
+        # 提取并保存meo_positions_per_slot
+        if 'meo_positions_per_slot' in data:
+            with open('data/meo_positions_per_slot.json', 'w') as f:
+                json.dump(data['meo_positions_per_slot'], f, indent=2)
+            print("创建文件: data/meo_positions_per_slot.json")
+
+        # 提取并保存MEO_per_slot
+        if 'MEO_per_slot' in data:
+            with open('data/MEO_per_slot.json', 'w') as f:
+                json.dump(data['MEO_per_slot'], f, indent=2)
+            print("创建文件: data/MEO_per_slot.json")
+
+        print("独立JSON文件创建完成!")
+
+    except FileNotFoundError:
+        print(f"错误: 找不到文件 {data_file}")
+    except Exception as e:
+        print(f"创建独立文件时出错: {e}")
+
+if __name__ == "__main__":
+    # 测试独立文件加载功能
+
+    print("=== 测试独立文件数据加载 ===")
+
+    # 首先检查是否存在独立文件，如果不存在则从data.json创建
+    required_files = ['data/sat_positions_per_slot.json', 'data/meo_positions_per_slot.json', 'data/MEO_per_slot.json']
+    if not all(os.path.exists(f) for f in required_files):
+        print("独立JSON文件不存在，尝试从data/data.json创建...")
+        create_separate_json_files('data/data.json')
+
+    # 验证数据
+    try:
+        is_valid = validate_dynamic_meo_data()
 
         if not is_valid:
-            print("\n生成示例动态MEO数据...")
-            # 生成示例动态MEO数据
-            num_slots = len(data.get('sat_positions_per_slot', []))
-            num_meos = data.get('num_meo_satellites', 3)
-
-            if num_slots > 0:
-                sample_meo_data = generate_sample_dynamic_meo_data(num_slots, num_meos)
-                print(f"生成了 {num_slots} 个时间槽的动态MEO数据")
-                print("示例数据 (前3个时间槽):")
-                for slot_id in range(min(3, len(sample_meo_data))):
-                    print(f"  时间槽 {slot_id}: {sample_meo_data[slot_id]}")
+            print("数据验证失败，请检查文件完整性")
 
         # 测试几个时间槽的数据加载
-        print("\n测试动态MEO环境加载:")
-        for slot_id in [0, 25, 49]:
+        print("\n=== 测试独立文件环境加载 ===")
+        for slot_id in [0, 2, 4]:
             try:
                 leos, meos, data = load_complete_environment(slot_id)
                 print_environment_summary(leos, meos, slot_id)
             except Exception as e:
                 print(f"加载时间槽 {slot_id} 失败: {e}")
 
-    except FileNotFoundError:
-        print("数据文件不存在，请确保 data/data.json 文件存在")
+        print("\n=== 测试独立文件加载性能 ===")
+        # 测试独立文件加载
+        sat_data = load_sat_positions_per_slot()
+        meo_data = load_meo_positions_per_slot()
+        meo_assign_data = load_meo_per_slot()
+
+        print(f"成功加载独立文件:")
+        print(f"  - LEO位置数据: {len(sat_data) if sat_data else 0} 个时间槽")
+        print(f"  - MEO位置数据: {len(meo_data) if meo_data else 0} 个时间槽")
+        print(f"  - MEO分配数据: {len(meo_assign_data) if meo_assign_data else 0} 个时间槽")
+
     except Exception as e:
         print(f"测试失败: {e}")
