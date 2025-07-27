@@ -2,8 +2,8 @@
   "num_satellites": 1462,
   "num_meo_satellites": 32,
   "num_ground": 261,
-  "num_train_slots": 10,
-  "num_predict_slots": 10,
+  "num_train_slots": 5736,
+  "num_predict_slots": 5736,
   "num_train_queries": 10,
   "num_predict_queries": 10,
   "gs_positions": [
