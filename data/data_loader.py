@@ -29,6 +29,28 @@ def get_data_file_path(filename: str) -> str:
     """获取data目录下文件的完整路径"""
     return os.path.join(CURRENT_DIR, filename)
 
+
+def create_meo_id_mapping(meo_assignments: List[int], num_meos: int = 32) -> Tuple[Dict[int, int], List[int]]:
+    """创建MEO ID映射，将大的MEO ID映射到0-31的本地索引"""
+    unique_meo_ids = list(set(meo_assignments))
+    unique_meo_ids.sort()
+
+    meo_mapping = {}
+    for i, meo_id in enumerate(unique_meo_ids):
+        meo_mapping[meo_id] = i % num_meos
+
+    mapped_assignments = [meo_mapping[meo_id] for meo_id in meo_assignments]
+
+    print(f"MEO ID映射: 发现 {len(unique_meo_ids)} 个唯一MEO ID，映射到 {num_meos} 个本地索引")
+    return meo_mapping, mapped_assignments
+
+
+def get_leo_meo_assignment_with_mapping(slot_id: int, meo_per_slot_data: List[Dict] = None) -> List[int]:
+    """获取LEO-MEO分配关系（带ID映射）"""
+    raw_assignments = get_leo_meo_assignment(slot_id, meo_per_slot_data)
+    meo_mapping, mapped_assignments = create_meo_id_mapping(raw_assignments)
+    return mapped_assignments
+
 def load_sat_positions_per_slot(file_path: str = None) -> Optional[List[List[List[float]]]]:
     """
     从独立文件加载LEO卫星位置数据
@@ -313,7 +335,7 @@ def create_leos_for_slot(slot_id: int,
     neighbors_info = load_neighbors_for_slot(slot_id, neighbors_dir)
 
     # 获取MEO分配
-    meo_assignments = get_leo_meo_assignment(slot_id, meo_per_slot_data)
+    meo_assignments = get_leo_meo_assignment_with_mapping(slot_id, meo_per_slot_data)
 
     # 创建LEO卫星 - 修复：处理2D和3D位置数据
     for i, position in enumerate(sat_positions):
