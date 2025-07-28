@@ -17,7 +17,7 @@ try:
     from satellites import LEOSatellite, MEOSatellite
     from rl_agent import RLAgent
     from routing import route_request_with_intelligent_edge_selection
-    from environment import find_nearest_available_leo, analyze_network_topology, update_dynamic_meo_clusters
+    from environment import analyze_network_topology
     from data.data_loader import load_complete_environment, validate_dynamic_meo_data
 except ImportError as e:
     print(f"导入错误: {e}")
@@ -83,7 +83,7 @@ class TrainingEnvironment:
             if is_dynamic_meo:
                 self.logger.info("检测到动态MEO数据，启用动态MEO训练模式")
             else:
-                self.logger.info("使用静态MEO数据，MEO位置在所有时间槽保持不变")
+                raise Exception("动态MEO数据加载失败")
 
             return True
 
@@ -134,7 +134,7 @@ class TrainingEnvironment:
             agent.epsilon = max(epsilon_min, agent.epsilon * epsilon_decay)
 
             # 日志输出
-            if episode % 100 == 0:
+            if episode % 1 == 0:
                 self.logger.info(
                     f"Episode {episode}: Reward={episode_reward:.2f}, "
                     f"Success Rate={success_rate:.2f}, "
@@ -211,7 +211,7 @@ class TrainingEnvironment:
                 continue
 
             # 3. 分析网络拓扑变化（可选）
-            if current_slot % 10 == 0:  # 每10个slot分析一次
+            if current_slot % 1 == 0:  # 每10个slot分析一次
                 topology_analysis = analyze_network_topology(leos, meos)
                 topology_changes.append({
                     'slot': current_slot,
@@ -220,24 +220,6 @@ class TrainingEnvironment:
 
                 self.logger.debug(f"Slot {current_slot} topology: "
                                 f"Network efficiency = {topology_analysis['network_efficiency']:.3f}")
-
-            # 4. 动态MEO集群重分配（可选，用于适应MEO移动）
-            enable_dynamic_reassignment = self.config.get('network.enable_dynamic_meo_reassignment', False)
-            if enable_dynamic_reassignment:  # 每5个slot重分配一次
-                try:
-                    original_assignments = {leo.id: leo.meo_id for leo in leos.values()}
-                    new_assignments = update_dynamic_meo_clusters(leos, meos)
-
-                    # 统计重分配情况
-                    reassignment_count = sum(1 for leo_id in original_assignments
-                                           if original_assignments[leo_id] != new_assignments.get(leo_id, -1))
-
-                    if reassignment_count > 0:
-                        meo_reassignments += reassignment_count
-                        self.logger.debug(f"Slot {current_slot}: {reassignment_count} LEOs reassigned to different MEOs")
-
-                except Exception as e:
-                    self.logger.warning(f"Dynamic MEO reassignment failed at slot {current_slot}: {e}")
 
             # 5. 处理所有活跃的包
             packets_to_remove = []

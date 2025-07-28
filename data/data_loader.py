@@ -49,7 +49,7 @@ def get_leo_meo_assignment_with_mapping(slot_id: int, meo_per_slot_data: List[Di
     """获取LEO-MEO分配关系（带ID映射）"""
     raw_assignments = get_leo_meo_assignment(slot_id, meo_per_slot_data)
     meo_mapping, mapped_assignments = create_meo_id_mapping(raw_assignments)
-    return mapped_assignments
+    return raw_assignments
 
 def load_sat_positions_per_slot(file_path: str = None) -> Optional[List[List[List[float]]]]:
     """
@@ -204,25 +204,8 @@ def get_leo_meo_assignment(slot_id: int, meo_per_slot_data: List[Dict] = None) -
             if slot_info['slot_id'] == slot_id:
                 return slot_info['leo_meo_assignments']
 
-    # 如果独立文件不存在，尝试从主配置文件加载（向后兼容）
-    try:
-        config_data = load_main_config()
-        if 'MEO_per_slot' in config_data:
-            meo_assignments = config_data['MEO_per_slot']
-            for slot_info in meo_assignments:
-                if slot_info['slot_id'] == slot_id:
-                    return slot_info['leo_meo_assignments']
-
-        # 如果都没找到，生成默认分配
-        num_leos = config_data.get('num_satellites', 7)
-        num_meos = config_data.get('num_meo_satellites', 3)
-        print(f"警告: 未找到时间槽 {slot_id} 的LEO-MEO分配数据，使用默认分配")
-        return [i % num_meos for i in range(num_leos)]
-
-    except Exception as e:
-        print(f"警告: 无法获取LEO-MEO分配数据 - {e}")
-        # 最后的回退方案
-        return [i % 3 for i in range(7)]
+    else:
+        raise Exception("读取的MEO_per_slot.json文件为空数据")
 
 def get_meo_positions_for_slot(slot_id: int, meo_positions_data: List[List[List[float]]] = None) -> List[List[float]]:
     """
@@ -245,32 +228,8 @@ def get_meo_positions_for_slot(slot_id: int, meo_positions_data: List[List[List[
         else:
             raise IndexError(f"时间槽 {slot_id} 超出MEO位置数据范围 (0-{len(meo_positions_data)-1})")
 
-    # 如果独立文件不存在，尝试从主配置文件加载（向后兼容）
-    try:
-        config_data = load_main_config()
-        if 'meo_positions_per_slot' in config_data:
-            if slot_id < len(config_data['meo_positions_per_slot']):
-                return config_data['meo_positions_per_slot'][slot_id]
-
-        # 回退到静态MEO位置
-        if 'meo_positions' in config_data:
-            print(f"警告: 使用静态MEO位置替代时间槽 {slot_id} 的动态位置")
-            return config_data['meo_positions']
-
-        # 如果都没有，生成默认位置
-        num_meos = config_data.get('num_meo_satellites', 3)
-        print(f"警告: 为时间槽 {slot_id} 生成默认MEO位置")
-        default_positions = []
-        for i in range(num_meos):
-            lat = 45.0 + i * 10.0
-            lon = 45.0 + i * 10.0
-            alt = 1000.0
-            default_positions.append([lat, lon, alt])
-        return default_positions
-
-    except Exception as e:
-        print(f"错误: 无法获取时间槽 {slot_id} 的MEO位置数据 - {e}")
-        raise
+    else:
+        raise Exception("读取meo_positions_per_slot.json文件返回为空")
 
 def get_sat_positions_for_slot(slot_id: int, sat_positions_data: List[List[List[float]]] = None) -> List[List[float]]:
     """
@@ -292,21 +251,9 @@ def get_sat_positions_for_slot(slot_id: int, sat_positions_data: List[List[List[
             return sat_positions_data[slot_id]
         else:
             raise IndexError(f"时间槽 {slot_id} 超出LEO位置数据范围 (0-{len(sat_positions_data)-1})")
+    else:
+        raise Exception("从sat_positions_per_slot.json加载的数据是空的")
 
-    # 如果独立文件不存在，尝试从主配置文件加载（向后兼容）
-    try:
-        config_data = load_main_config()
-        if 'sat_positions_per_slot' in config_data:
-            if slot_id < len(config_data['sat_positions_per_slot']):
-                return config_data['sat_positions_per_slot'][slot_id]
-            else:
-                raise IndexError(f"时间槽 {slot_id} 超出LEO位置数据范围")
-        else:
-            raise ValueError("未找到LEO位置数据")
-
-    except Exception as e:
-        print(f"错误: 无法获取时间槽 {slot_id} 的LEO位置数据 - {e}")
-        raise
 
 def create_leos_for_slot(slot_id: int,
                         sat_positions_data: List[List[List[float]]] = None,
@@ -395,7 +342,7 @@ def create_meos_for_slot(slot_id: int, meo_positions_data: List[List[List[float]
             alt = 1000.0  # 默认MEO高度
 
         meos[i] = MEOSatellite(
-            id=i,
+            id=i + 1723, # 为了迎合跟leo统一排序的id
             latitude=lat,
             longitude=lon,
             altitude=alt,
@@ -449,7 +396,7 @@ def load_complete_environment(slot_id: int,
 
     # 设置默认neighbors目录
     if neighbors_dir is None:
-        neighbors_dir = get_data_file_path("neighbors")
+        raise Exception("data目录下没有neighbors")
 
     # 创建LEO卫星
     leos = create_leos_for_slot(slot_id, sat_positions_data, meo_per_slot_data, neighbors_dir)
@@ -474,47 +421,17 @@ def validate_dynamic_meo_data(data: dict = None) -> bool:
         数据是否有效
     """
     print("验证动态MEO数据完整性...")
-
     # 直接加载独立文件，不依赖传入参数
     meo_positions_data = load_meo_positions_per_slot()
     sat_positions_data = load_sat_positions_per_slot()
 
     # 检查是否有动态MEO位置数据
     if meo_positions_data is None:
-        print("警告: 没有找到独立的MEO位置数据文件")
-
-        # 尝试检查主配置文件
-        if data is None:
-            try:
-                data = load_main_config()
-            except Exception as e:
-                print(f"错误: 无法加载主配置文件 - {e}")
-                return False
-
-        if 'meo_positions_per_slot' not in data:
-            print("错误: 主配置文件中也没有MEO位置数据")
-            return False
-        else:
-            meo_positions_data = data['meo_positions_per_slot']
-            print("使用主配置文件中的MEO位置数据")
+        raise Exception("警告: 没有找到独立的MEO位置数据文件")
 
     # 检查LEO位置数据
     if sat_positions_data is None:
-        print("警告: 没有找到独立的LEO位置数据文件")
-
-        if data is None:
-            try:
-                data = load_main_config()
-            except Exception as e:
-                print(f"错误: 无法加载主配置文件 - {e}")
-                return False
-
-        if 'sat_positions_per_slot' not in data:
-            print("错误: 主配置文件中也没有LEO位置数据")
-            return False
-        else:
-            sat_positions_data = data['sat_positions_per_slot']
-            print("使用主配置文件中的LEO位置数据")
+        raise Exception("警告: 没有找到独立的MEO位置数据文件")
 
     # 检查时间槽数量匹配
     meo_slots = len(meo_positions_data)
@@ -524,12 +441,7 @@ def validate_dynamic_meo_data(data: dict = None) -> bool:
     print(f"LEO位置数据时间槽数: {leo_slots}")
 
     if meo_slots != leo_slots:
-        print(f"警告: MEO位置时间槽数 ({meo_slots}) 与LEO位置时间槽数 ({leo_slots}) 不匹配")
-        print("将使用较小的时间槽数量进行验证")
-        min_slots = min(meo_slots, leo_slots)
-        if min_slots < 10:
-            print(f"错误: 可用时间槽数量太少 ({min_slots})，无法进行有效训练")
-            return False
+        raise Exception("meo和leo位置文件的时间槽数量不一样")
     else:
         min_slots = meo_slots
 
@@ -537,12 +449,10 @@ def validate_dynamic_meo_data(data: dict = None) -> bool:
     try:
         if data is None:
             data = load_main_config()
-        expected_meos = data.get('num_meo_satellites', 32)
-        expected_leos = data.get('num_satellites', 1462)
+        expected_meos = data.get('num_meo_satellites')
+        expected_leos = data.get('num_satellites')
     except Exception:
-        print("警告: 无法加载主配置文件，使用默认数量验证")
-        expected_meos = 32
-        expected_leos = 1462
+        raise Exception("data.json文件中没有num_meo_satellites和num_satellites元素")
 
     # 检查前几个时间槽的数据完整性
     check_slots = min(3, min_slots)  # 只检查前3个时间槽，减少输出
@@ -634,47 +544,6 @@ def print_environment_summary(leos: Dict[int, LEOSatellite], meos: Dict[int, MEO
     for i in range(min(5, len(leos))):
         leo = leos[i]
         print(f"  LEO {i}: 位置({leo.latitude:.1f}, {leo.longitude:.1f}), 控制MEO={leo.meo_id}, 邻居={leo.neighbors}")
-
-def generate_sample_dynamic_meo_data(num_slots: int, num_meos: int) -> List[List[List[float]]]:
-    """
-    生成示例动态MEO数据（用于测试）
-
-    Args:
-        num_slots: 时间槽数量
-        num_meos: MEO卫星数量
-
-    Returns:
-        动态MEO位置数据 [slot][meo_id][lat, lon, alt]
-    """
-    import random
-
-    meo_positions_per_slot = []
-
-    # 为每个MEO设置初始位置
-    base_positions = []
-    for i in range(num_meos):
-        base_lat = 45.0 + i * 10.0  # 分散在不同纬度
-        base_lon = 45.0 + i * 10.0  # 分散在不同经度
-        base_alt = 1000.0  # MEO高度
-        base_positions.append([base_lat, base_lon, base_alt])
-
-    # 为每个时间槽生成MEO位置（在基础位置附近移动）
-    for slot in range(num_slots):
-        slot_positions = []
-        for meo_id in range(num_meos):
-            base_lat, base_lon, base_alt = base_positions[meo_id]
-
-            # 在基础位置附近随机移动（模拟轨道运动）
-            movement_range = 5.0  # 移动范围
-            new_lat = base_lat + random.uniform(-movement_range, movement_range)
-            new_lon = base_lon + random.uniform(-movement_range, movement_range)
-            new_alt = base_alt + random.uniform(-50.0, 50.0)  # 高度也有小幅变化
-
-            slot_positions.append([new_lat, new_lon, new_alt])
-
-        meo_positions_per_slot.append(slot_positions)
-
-    return meo_positions_per_slot
 
 if __name__ == "__main__":
     # 测试独立文件加载功能

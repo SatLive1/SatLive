@@ -25,9 +25,9 @@ rl_agent:
 
 # 训练配置
 training:
-  num_episodes: 50
+  num_episodes: 1
   max_steps_per_episode: 6000
-  save_interval: 25
+  save_interval: 1
 
 # 环境奖励配置
 environment:

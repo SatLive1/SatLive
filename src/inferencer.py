@@ -12,7 +12,7 @@ try:
     from satellites import LEOSatellite, MEOSatellite
     from rl_agent import RLAgent
     from routing import route_request_with_intelligent_edge_selection
-    from environment import find_nearest_available_leo, analyze_network_topology
+    from environment import analyze_network_topology
     from data.data_loader import load_complete_environment, validate_dynamic_meo_data
 except ImportError as e:
     print(f"导入错误: {e}")
