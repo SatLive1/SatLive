@@ -223,7 +223,7 @@ class TrainingEnvironment:
 
             # 4. 动态MEO集群重分配（可选，用于适应MEO移动）
             enable_dynamic_reassignment = self.config.get('network.enable_dynamic_meo_reassignment', False)
-            if enable_dynamic_reassignment and current_slot % 5 == 0:  # 每5个slot重分配一次
+            if enable_dynamic_reassignment:  # 每5个slot重分配一次
                 try:
                     original_assignments = {leo.id: leo.meo_id for leo in leos.values()}
                     new_assignments = update_dynamic_meo_clusters(leos, meos)

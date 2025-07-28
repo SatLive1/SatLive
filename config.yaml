@@ -6,7 +6,7 @@ data:
 
 # 网络配置
 network:
-  num_time_slots: 10
+  num_time_slots: 5736
   max_load_per_satellite: 10
   enable_dynamic_meo: true
   enable_dynamic_meo_reassignment: false
@@ -26,7 +26,7 @@ rl_agent:
 # 训练配置
 training:
   num_episodes: 50
-  max_steps_per_episode: 30
+  max_steps_per_episode: 6000
   save_interval: 25
 
 # 环境奖励配置
