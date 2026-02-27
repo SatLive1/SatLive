@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Communication Projects - SatLive & MEO_LEO</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.8;
+            color: #333;
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background-color: #fafafa;
+        }
+        .project-card {
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 2.5rem;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.08);
+            margin-bottom: 3rem;
+        }
+        .project-header {
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .project-title {
+            font-size: 1.8rem;
+            color: #2c3e50;
+            margin: 0 0 0.5rem 0;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .highlight {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        h3 {
+            color: #34495e;
+            font-size: 1.3rem;
+            margin: 1.8rem 0 1rem 0;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 1.2rem;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            color: #2d3748;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .file-tree {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <!-- SatLive Project Section -->
+    <div class="project-card">
+        <div class="project-header">
+            <h2 class="project-title">SatLive</h2>
+        </div>
+        <p>
+            SatLive is an end-to-end live video streaming framework designed for Integrated Satellite-Terrestrial Networks (ISTNs). It adopts a hierarchical reinforcement learning (RL)-driven dynamic routing solution, adapting to the rapid topology changes of Low Earth Orbit (LEO) satellites and prioritizing video Quality of Experience (QoE). Through mechanisms like cross-domain routing and video-aware transmission, SatLive reduces average packet delay by at least <span class="highlight">28.8%</span> and improves QoE by <span class="highlight">1.13x</span>. The source code and dataset have been open-sourced and are available at: <a href="https://github.com/SatLive1/SatLive" target="_blank">GitHub</a>
+        </p>
+    </div>
+
+    <!-- MEO_LEO Project Section -->
+    <div class="project-card">
+        <div class="project-header">
+            <h2 class="project-title">README</h2>
+        </div>
+
+        <h3>Overview</h3>
+        <p>
+            This project implements a <strong>satellite routing system supporting loop detection and intelligent edge node selection</strong>. Specifically optimized for MEO-LEO constellation routing scenarios, the system integrates a variety of advanced routing strategies and performance monitoring functionalities.
+        </p>
+
+        <h3>Project Structure</h3>
+        <div class="code-block file-tree">
+<pre>
+src/
+├── routing.py              # Core routing algorithms
+├── satellites.py           # Satellite data structures
+├── environment.py          # Environment management
+├── rl_agent.py            # Reinforcement learning agent
+├── main.py                # Main program entry
+└── ...
+
+examples/
+└── advanced_routing_demo.py # Function demonstration
+
+docs/
+├── ADVANCED_ROUTING.md     # Detailed technical documentation
+└── ADVANCED_ROUTING_SUMMARY.md # Technical summary
+</pre>
+        </div>
+
+        <h3>Core Functions</h3>
+        <h4>Main Routing Function</h4>
+        <div class="code-block">
+<pre>
+def route_request_with_intelligent_edge_selection(
+    src_leo_id: int,
+    dst_leo_id: int,
+    leos: Dict[int, LEOSatellite],
+    meos: Dict[int, MEOSatellite],
+    agent: RLAgent,
+    max_hops: int = 25,
+    max_retries: int = 3,
+    use_redundant_paths: bool = True,
+    load_weight: float = 0.25,
+    distance_weight: float = 0.35,
+    connectivity_weight: float = 0.25,
+    reliability_weight: float = 0.15,
+    load_threshold: float = 0.8
+) -> Tuple[List[int], Dict[str, any]]
+</pre>
+        </div>
+
+        <h3>How to Run</h3>
+        <h4>Basic Demonstration</h4>
+        <div class="code-block">
+python -m src.main
+        </div>
+    </div>
+</body>
+</html>
